@@ -64,7 +64,7 @@ def detect_usage_change_multi(models, topn=1000):
     logging.info('Shared vocabulary obtained.')
 
     # Filter out words with less than 100 occurrences in each model
-    shared_vocab = {word for word in shared_vocab if all(model.wv.get_vecattr(word, 'count') >= 200 for model in loaded_models)}
+    shared_vocab = {word for word in shared_vocab if all(model.wv.get_vecattr(word, 'count') >= 100 for model in loaded_models)}
     logging.info('Filtered shared vocabulary obtained.')
 
     # Initialize a dictionary to store the usage change scores
