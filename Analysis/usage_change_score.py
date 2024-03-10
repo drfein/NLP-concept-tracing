@@ -1,6 +1,7 @@
 import logging
 from gensim.models import Word2Vec
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 def detect_usage_change(model_name1, model_name2, topn=1000):
     logging.info('Starting usage change detection...')
@@ -17,8 +18,78 @@ def detect_usage_change(model_name1, model_name2, topn=1000):
     shared_vocab = {word for word in shared_vocab if model1.wv.get_vecattr(word, 'count') >= 100 and model2.wv.get_vecattr(word, 'count') >= 100}
     logging.info('Filtered shared vocabulary obtained.')
 
+    while True:
+        word = input("Enter a word to check its usage change (or 'exit' to stop): ")
+        if word == 'exit':
+            break
+        if word not in shared_vocab:
+            print(f"{word} is not in the shared vocabulary.")
+            continue
+
+        # Get the top k nearest neighbors in each model
+        nn1 = set([w for w, _ in model1.wv.most_similar(word, topn=topn)])
+        nn2 = set([w for w, _ in model2.wv.most_similar(word, topn=topn)])
+
+        # Compute the usage change score
+        usage_change_score = -len(nn1.intersection(nn2))
+
+        # Print the usage change score and the 10 nearest neighbors according to each model
+        print(f"Word: {word}, Usage Change Score: {usage_change_score}")
+        print(f"Top 10 nearest neighbors in {model_name1}: {[w for w, _ in model1.wv.most_similar(word, topn=10)]}")
+        print(f"Top 10 nearest neighbors in {model_name2}: {[w for w, _ in model2.wv.most_similar(word, topn=10)]}")
+        print("\n")
+
+def find_highest_change_words(model_name1, model_name2, topn=1000, num_words=10):
+    # Load the specified models
+    model1 = Word2Vec.load(f"Models/{model_name1}")
+    model2 = Word2Vec.load(f"Models/{model_name2}")
+
+    # Get the shared vocabulary
+    shared_vocab = set(model1.wv.key_to_index).intersection(set(model2.wv.key_to_index))
+
+    # Filter out words with less than 100 occurrences in each model
+    shared_vocab = {word for word in shared_vocab if model1.wv.get_vecattr(word, 'count') >= 100 and model2.wv.get_vecattr(word, 'count') >= 100}
+
     # Initialize a dictionary to store the usage change scores
     usage_change_scores = {}
+
+    # For each word in the shared vocabulary
+    for word in tqdm(shared_vocab, desc="Processing words"):
+        # Get the top k nearest neighbors in each model
+        nn1 = set([w for w, _ in model1.wv.most_similar(word, topn=topn) if model1.wv.get_vecattr(w, 'count') >= 100])
+        nn2 = set([w for w, _ in model2.wv.most_similar(word, topn=topn) if model2.wv.get_vecattr(w, 'count') >= 100])
+
+        # Compute the usage change score
+        usage_change_score = -len(nn1.intersection(nn2))
+
+        # Add the usage change score to the dictionary
+        usage_change_scores[word] = usage_change_score
+
+    # Sort the dictionary by the usage change scores in descending order
+    sorted_usage_change_scores = sorted(usage_change_scores.items(), key=lambda x: x[1], reverse=True)
+
+    # Write the words with the highest usage change scores and their nearest neighbors to a new file
+    with open('highest_change_words.txt', 'w') as f:
+        for word, score in sorted_usage_change_scores:
+            f.write(f"Word: {word}, Usage Change Score: {score}\n")
+            f.write(f"Top 10 nearest neighbors in {model_name1}: {[w for w, _ in model1.wv.most_similar(word, topn=10) if model1.wv.get_vecattr(w, 'count') >= 100]}\n")
+            f.write(f"Top 10 nearest neighbors in {model_name2}: {[w for w, _ in model2.wv.most_similar(word, topn=10) if model2.wv.get_vecattr(w, 'count') >= 100]}\n")
+            f.write("\n")
+
+
+def plot_word_change_distribution(model_name1, model_name2, topn=1000):
+    # Load the specified models
+    model1 = Word2Vec.load(f"Models/{model_name1}")
+    model2 = Word2Vec.load(f"Models/{model_name2}")
+
+    # Get the shared vocabulary
+    shared_vocab = set(model1.wv.key_to_index).intersection(set(model2.wv.key_to_index))
+
+    # Filter out words with less than 100 occurrences in each model
+    shared_vocab = {word for word in shared_vocab if model1.wv.get_vecattr(word, 'count') >= 100 and model2.wv.get_vecattr(word, 'count') >= 100}
+
+    # Initialize a list to store the usage change scores
+    usage_change_scores = []
 
     # For each word in the shared vocabulary
     for word in tqdm(shared_vocab, desc="Processing words"):
@@ -27,97 +98,62 @@ def detect_usage_change(model_name1, model_name2, topn=1000):
         nn2 = set([w for w, _ in model2.wv.most_similar(word, topn=topn)])
 
         # Compute the usage change score
-        usage_change_scores[word] = -len(nn1.intersection(nn2))
+        usage_change_score = -len(nn1.intersection(nn2))
 
-    # Sort the words by their usage change scores in descending order
-    sorted_words = sorted(usage_change_scores.items(), key=lambda x: x[1], reverse=True)
+        # Add the usage change score to the list
+        usage_change_scores.append(usage_change_score)
 
-    # Print the top 10 most changed words and their 10 nearest neighbors according to each model
-    for word, score in sorted_words[:10]:
-        print(f"Word: {word}, Score: {score}")
-        print(f"Top 10 nearest neighbors in {model_name1}: {model1.wv.most_similar(word, topn=10)}")
-        print(f"Top 10 nearest neighbors in {model_name2}: {model2.wv.most_similar(word, topn=10)}")
-        print("\n")
+    # Plot the distribution of usage change scores
+    plt.hist(usage_change_scores, bins=50)
+    plt.xlabel('Usage Change Score')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Word Usage Change Scores')
+    plt.show()
 
-def print_nns(word, model_name1, model_name2, topn=20):
-    # Load the specified models
-    model1 = Word2Vec.load(f"Models/{model_name1}")
-    model2 = Word2Vec.load(f"Models/{model_name2}")
+def find_highest_change_words_multi(models):
+    # Initialize a dictionary to store the maximum usage change scores for each word
+    max_usage_change_scores = {}
 
-    # Get the shared vocabulary
-    shared_vocab = set(model1.wv.key_to_index).intersection(set(model2.wv.key_to_index))
+    # For each pair of consecutive models
+    for i in range(len(models) - 1):
+        model_name1 = models[i]
+        model_name2 = models[i+1]
 
-    if word in shared_vocab:
-        print(f"Top 10 nearest neighbors in {model_name1}: {model1.wv.most_similar(word, topn=topn)}")
-        print(f"Top 10 nearest neighbors in {model_name2}: {model2.wv.most_similar(word, topn=topn)}")
-    else:
-        print(f"{word} is not in the shared vocabulary.")
+        # Load the specified models
+        model1 = Word2Vec.load(f"Models/{model_name1}")
+        model2 = Word2Vec.load(f"Models/{model_name2}")
 
+        # Get the shared vocabulary
+        shared_vocab = set(model1.wv.key_to_index).intersection(set(model2.wv.key_to_index))
 
-def detect_usage_change_multi(models, topn=1000):
-    # Load the specified models
-    loaded_models = [Word2Vec.load(f"Models/{model_name}") for model_name in models]
-    logging.info('Models loaded successfully.')
+        # Filter out words with less than 100 occurrences in each model
+        shared_vocab = {word for word in shared_vocab if model1.wv.get_vecattr(word, 'count') >= 100 and model2.wv.get_vecattr(word, 'count') >= 100}
 
-    # Get the shared vocabulary
-    shared_vocab = set.intersection(*[set(model.wv.key_to_index) for model in loaded_models])
-    logging.info('Shared vocabulary obtained.')
+        # For each word in the shared vocabulary
+        for word in tqdm(shared_vocab, desc="Processing words"):
+            # Get the top 10 nearest neighbors in each model
+            nn1 = set([w for w, _ in model1.wv.most_similar(word, topn=1000) if w in model1.wv.key_to_index])
+            nn2 = set([w for w, _ in model2.wv.most_similar(word, topn=1000) if w in model2.wv.key_to_index])
 
-    # Filter out words with less than 100 occurrences in each model
-    shared_vocab = {word for word in shared_vocab if all(model.wv.get_vecattr(word, 'count') >= 100 for model in loaded_models)}
-    logging.info('Filtered shared vocabulary obtained.')
+            # Compute the usage change score
+            usage_change_score = -len(nn1.intersection(nn2))
 
-    # Initialize a dictionary to store the usage change scores
-    usage_change_scores = {}
+            # If the word is not in the dictionary or the usage change score is higher than the current maximum, update the dictionary
+            if word not in max_usage_change_scores or usage_change_score > max_usage_change_scores[word][0]:
+                max_usage_change_scores[word] = (usage_change_score, model_name1, model_name2)
 
-    # For each word in the shared vocabulary
-    for word in tqdm(shared_vocab, desc="Processing words"):
-        # Get the top k nearest neighbors in each model
-        nns = [set([w for w, _ in model.wv.most_similar(word, topn=topn)]) for model in loaded_models]
+    # Sort the dictionary by the usage change scores in descending order
+    sorted_max_usage_change_scores = sorted(max_usage_change_scores.items(), key=lambda x: x[1][0], reverse=True)
 
-        # Compute the usage change score
-        max_usage_change = 0
-        for i in range(len(nns) - 1):
-            usage_change = len(nns[i].intersection(nns[i+1]))
-            if usage_change > max_usage_change:
-                max_usage_change = usage_change
-        usage_change_scores[word] = -max_usage_change
-
-    # Sort the words by their usage change scores in descending order
-    sorted_words = sorted(usage_change_scores.items(), key=lambda x: x[1], reverse=True)
-
-    # Print the top 10 most changed words and their 10 nearest neighbors according to each model
-    for word, score in sorted_words[:20]:
-        print(f"Word: {word}, Score: {score}")
-        for i, model in enumerate(loaded_models):
-            print(f"Top 10 nearest neighbors in {models[i]}: {[w for w, _ in model.wv.most_similar(word, topn=10)]}")
-        print("\n")
-
-    # Loop to print the similarity and neighbors for a word inputted to the terminal
-    while True:
-        input_word = input("Enter a word to get its similarity and neighbors (or 'exit' to stop): ")
-        if input_word.lower() == 'exit':
-            break
-        if input_word in shared_vocab:
-            for i, model in enumerate(loaded_models):
-                # The similarity method requires two words to compare, here we are comparing the input_word with itself in each model
-                print(f"Similarity of {input_word} in {models[i]}: {model.wv.similarity(input_word, input_word)}")
-                print(f"Top 10 nearest neighbors in {models[i]}: {[w for w, _ in model.wv.most_similar(input_word, topn=10)]}")
-            print("\n")
-        else:
-            print(f"{input_word} is not in the shared vocabulary.\n")
-
-def print_nns_multi(word, models, topn=20):
-    # Load the specified models
-    loaded_models = [Word2Vec.load(f"Models/{model_name}") for model_name in models]
-
-    # Get the shared vocabulary
-    shared_vocab = set.intersection(*[set(model.wv.key_to_index) for model in loaded_models])
-
-    if word in shared_vocab:
-        for i, model in enumerate(loaded_models):
-            print(f"Top 10 nearest neighbors in {models[i]}: {[w for w, _ in model.wv.most_similar(word, topn=topn)]}")
-    else:
-        print(f"{word} is not in the shared vocabulary.")
+    # Write the words with the highest usage change scores and their nearest neighbors to a new file
+    with open('highest_change_words_multi.txt', 'w') as f:
+        for word, (score, model_name1, model_name2) in sorted_max_usage_change_scores:
+            f.write(f"Word: {word}, Maximum Usage Change Score: {score}, Models: {model_name1}, {model_name2}\n")
+            if word in model1.wv.key_to_index:
+                f.write(f"Top 10 nearest neighbors in {model_name1}: {[w for w, _ in model1.wv.most_similar(word, topn=10) if w in model1.wv.key_to_index]}\n")
+            if word in model2.wv.key_to_index:
+                f.write(f"Top 10 nearest neighbors in {model_name2}: {[w for w, _ in model2.wv.most_similar(word, topn=10) if w in model2.wv.key_to_index]}\n")
+            f.write("\n")
 
 
+# plot_word_change_distribution("word2vec_random_split_2.model", "word2vec_random_split_1.model", topn=1000)
