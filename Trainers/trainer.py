@@ -88,17 +88,18 @@ def train_word2vec_models_random_split():
     # Convert 'year' column to int
     df['year'] = df['year'].astype(int)
 
-    # Randomly split the dataframe into two
+    # Randomly split the dataframe into two groups that are each 25% of the data
     df_random_split_1 = df.sample(frac=0.5, random_state=1)
-    df_random_split_2 = df.drop(df_random_split_1.index)
+    df = df.drop(df_random_split_1.index)
+    df_random_split_2 = df
 
     # Train a Word2Vec model for the first random split
-    model_random_split_1 = Word2Vec(df_random_split_1['processed_text'].tolist(), min_count=1, workers=4)
-    model_random_split_1.save("Models/word2vec_random_split_1.model")
+    # model_random_split_1 = Word2Vec(df_random_split_1['processed_text'].tolist(), min_count=1, workers=4)
+    # model_random_split_1.save("Models/word2vec_random_split_50_1.model")
 
     # Train a Word2Vec model for the second random split
     model_random_split_2 = Word2Vec(df_random_split_2['processed_text'].tolist(), min_count=1, workers=4)
-    model_random_split_2.save("Models/word2vec_random_split_2.model")
+    model_random_split_2.save("Models/word2vec_random_split_50_2.model")
 
 def train_word2vec_models_median_year():
     df = pd.read_parquet('ACL-data/acl-publication-info.74k.v2.parquet')
@@ -118,12 +119,12 @@ def train_word2vec_models_median_year():
     # Find the index of the median paper
     median_index = df.shape[0] // 2
 
+    median_year = df.iloc[median_index]['year']
+    print(f"Median year: {median_year}")
+
     # Split the dataframe into two equal halves
     df_before_median_year = df.iloc[:median_index]
     df_after_median_year = df.iloc[median_index:]
-
-    median_year = df.iloc[median_index]['year']
-    print(f"Median year: {median_year}")
 
     # Train a Word2Vec model for the papers before the median year
     model_before_median_year = Word2Vec(df_before_median_year['processed_text'].tolist(), min_count=1, workers=4)
@@ -132,4 +133,3 @@ def train_word2vec_models_median_year():
     # Train a Word2Vec model for the papers after the median year
     model_after_median_year = Word2Vec(df_after_median_year['processed_text'].tolist(), min_count=1, workers=4)
     model_after_median_year.save("Models/word2vec_after_median_year.model")
-

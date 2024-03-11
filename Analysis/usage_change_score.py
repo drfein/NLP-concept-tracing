@@ -157,3 +157,47 @@ def find_highest_change_words_multi(models):
 
 
 # plot_word_change_distribution("word2vec_random_split_2.model", "word2vec_random_split_1.model", topn=1000)
+
+def plot_word_change_distribution_multiple(models_pairs, topn=1000):
+    """
+    Plot the distribution of usage change scores for multiple pairs of models.
+    
+    Parameters:
+    - models_pairs: A list of tuples, where each tuple contains the filenames of two models to be compared.
+    - topn: The number of top nearest neighbors to consider for calculating the usage change score.
+    """
+    # Initialize a figure for plotting
+    plt.figure(figsize=(10, 6))
+
+    # Iterate through each pair of models
+    for model_names in models_pairs:
+        model1 = Word2Vec.load(f"Models/{model_names[0]}")
+        model2 = Word2Vec.load(f"Models/{model_names[1]}")
+        
+        shared_vocab = set(model1.wv.key_to_index).intersection(set(model2.wv.key_to_index))
+        shared_vocab = {word for word in shared_vocab if model1.wv.get_vecattr(word, 'count') >= 100 and model2.wv.get_vecattr(word, 'count') >= 100}
+        
+        usage_change_scores = []
+        for word in tqdm(shared_vocab, desc=f"Processing words for {model_names[0]} vs {model_names[1]}"):
+            nn1 = set([w for w, _ in model1.wv.most_similar(word, topn=topn)])
+            nn2 = set([w for w, _ in model2.wv.most_similar(word, topn=topn)])
+            usage_change_score = -len(nn1.intersection(nn2))
+            usage_change_scores.append(usage_change_score)
+        
+        # Plot the distribution for this pair of models
+        plt.hist(usage_change_scores, bins=50, alpha=0.5, label=f"{model_names[0]} vs {model_names[1]}")
+
+    # Customize the plot
+    plt.xlabel('Usage Change Score')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Word Usage Change Scores Across Model Pairs')
+    plt.legend(loc='upper right')
+    plt.show()
+
+# Example usage:
+models_pairs = [
+    ("word2vec_random_split_50_1.model", "word2vec_random_split_50_2.model"),
+    ("word2vec_more_than_median.model", "word2vec_less_than_median.model"),
+]
+
+plot_word_change_distribution_multiple(models_pairs, topn=1000)
